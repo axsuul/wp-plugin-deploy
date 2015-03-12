@@ -8,4 +8,4 @@ Edit the variables within the [deploy](/deploy) script to customize it to your p
 $ ./deploy
 ```
 
-Make sure to `chmod +x` the script to make it executable. What it does is create `svn` directory, keep the Subversion repository in there, and push it remotely.
+Make sure to `chmod +x` the script to make it executable. What it does is create a `svn` in the root directory, keep the Subversion repository in there, and then push it remotely. It's like magic!

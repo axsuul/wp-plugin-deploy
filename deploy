@@ -1,0 +1,63 @@
+#!/usr/bin/env ruby
+
+require 'pathname'
+require 'fileutils'
+require 'pty'
+
+# Variables
+message = "Deploy from git"
+branch  = "trunk"
+slug    = "plugin"
+svn_url = "http://plugins.svn.wordpress.org/your-coupon-slug/"
+
+root_path    = Pathname.new(File.dirname(File.dirname(File.expand_path(__FILE__))))
+working_path = root_path.join(slug)
+svn_path     = root_path.join("svn")
+dest_path    = svn_path.join(branch)
+assets_path  = svn_path.join("assets")
+
+def run(command)
+  begin
+    PTY.spawn(command) do |stdout, stdin, pid|
+      begin
+        stdout.each { |line| print line }
+      rescue Errno::EIO
+      end
+    end
+  rescue PTY::ChildExited
+    puts "The child process exited!"
+  end
+end
+
+# Initialize subversion repo if not found
+unless Dir.exists?(svn_path)
+  puts "Coudn't find the SVN repo at #{svn_path}. Initializing..."
+  run "svn co '#{svn_url}' '#{svn_path}'"
+end
+
+# Remove everything in paths  except .svn dirs (reset)
+[dest_path, assets_path].each do |path|
+  Dir.foreach(path).each do |file|
+    next if file == "." or file == ".."
+    next if file.match(/\.svn/)
+
+    file_path = path.join(file)
+
+    FileUtils.rm_rf(file_path)
+  end
+end
+
+# Reset git repo
+run "git checkout -f master"
+
+# Copy all working files to destination
+run "rsync --recursive --exclude='sftp-config.json' '#{working_path}/' '#{dest_path}'"
+
+# Copy all assets over
+run "rsync --recursive '#{root_path.join('assets')}/' '#{assets_path}'"
+
+# Add/remove all files into subversion
+run "cd '#{svn_path}' && svn stat | awk '/^\?/ {print $2}' | xargs svn add > /dev/null 2>&1"
+run "cd '#{svn_path}' && svn stat | awk '/^\!/ {print $2}' | xargs svn rm --force"
+
+run "cd '#{svn_path}' && svn ci -m '#{message}'"
